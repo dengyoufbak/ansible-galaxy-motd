@@ -1,0 +1,4 @@
+---
+roles:
+  - src: dengyouf.ansible_galaxy_motd
+    version: main
