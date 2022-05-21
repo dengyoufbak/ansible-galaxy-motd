@@ -1,0 +1,11 @@
+---
+- name: Ansible Galaxy Motd
+  hosts: all
+  remote_user: root
+  become: yes
+
+  tasks:
+    - include_role:
+        name: Ansible-Galaxy-Motd
+      vars:
+        FILE_COPY_DIR: /usr/local/bin
