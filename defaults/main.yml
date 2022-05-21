@@ -1,0 +1,4 @@
+---
+# defaults file for Ansible-Galaxy-Motd
+
+FILE_COPY_DIR: /usr/local/bin

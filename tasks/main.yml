@@ -1,0 +1,20 @@
+---
+# tasks file for Ansible-Galaxy-Motd
+
+- name: Copy color.awk file to remote hosts
+  copy: src=files/color.awk dest={{ FILE_COPY_DIR }} mode=0755
+ 
+- name: Copy dynmotd file to remote hosts
+  copy: src=files/dynmotd dest={{ FILE_COPY_DIR }} mode=0755
+
+- name: Install package 
+  yum: 
+    name:
+      - figlet
+      - cowsay
+
+- name: Modify PATH 
+  lineinfile:
+    dest: /etc/profile
+    state: present
+    line: '{{ FILE_COPY_DIR }}/dynmotd'

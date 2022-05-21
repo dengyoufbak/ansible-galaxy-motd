@@ -1,0 +1,133 @@
+#!/bin/bash
+
+function check_command(){
+    local r=0
+    `command -v $1 >/dev/null 2>&1` || r=1
+    return ${r}
+}
+
+USER=`whoami`
+FROM=`who am i | grep -Po "(?<=\().*(?=\))"`
+HOSTNAME_FQDN=`hostname`
+HOSTNAME=`echo $HOSTNAME_FQDN|cut -d. -f1`
+IP=`ip addr | awk '/inet/ && ! /\/32/ {ip[$NF] = $2; sub(/\/.*$/,"",ip[$NF])} END {for(i in ip){if(i ~ "en|eth0") print ip[i]}}'`
+RELEASE=`cat /etc/redhat-release`
+USERS_NUM=`users | wc -w`
+KERNEL_VERSION=`uname -r`
+check_command docker && DOCKER_VERSION=`docker -v|awk '{print $3}'|cut -d',' -f1`
+
+PSA=`ps -Afl | wc -l`
+FORMATEDTIME=`date +"%y-%m-%d %T"`
+
+# Time of day
+HOUR=$(date +"%H")
+if [ $HOUR -lt 12  -a $HOUR -ge 0 ]; then
+    TIME="Morning"
+elif [ $HOUR -lt 17 -a $HOUR -ge 12 ]; then
+    TIME="Afternoon"
+else
+    TIME="Evening"
+fi
+
+# System uptime
+uptime=`cat /proc/uptime | cut -f1 -d.`
+upDays=$((uptime/60/60/24))
+upHours=$((uptime/60/60%24))
+upMins=$((uptime/60%60))
+upSecs=$((uptime%60))
+
+#SYS_UPTIME="${upDays}天${upHours}时${upMins}分${upSecs}秒"
+SYS_UPTIME="$upDays days $upHours hours $upMins minutes $upSecs seconds $RESET_COLORS"
+########## 资源统计 ########
+#memory
+MEMORY=`free -m|sed -n '2p'|awk '{printf("内存 %.2f%% 容量:%sM 已用:%sM 可用:%sM\n",100-($7*100/$2),$2,$3,$7)}'`
+
+#disk
+DISK_ROOT=`df -Ph| grep '/$' |awk '{printf "根目录 %s 容量:%s 已用:%s 可用:%s", $5,$2,$3,$4 }'`
+DISK_DATA=`df -Ph| grep ' /data$' |awk '{printf "数据盘 %s 容量:%s 已用:%s 可用:%s", $5,$2,$3,$4 }'`
+disk_warning=`df -m | sed '1d;/ /!N;s/\n//;s/ \+/ /;' | awk 'sub (/%/, "", $5){if ($5*1 > 80) printf "分区 %s %s\n", $5,$6}' | cut -b -24`
+
+#load负载情况
+cpu_nums=`cat /proc/cpuinfo | grep "processor"|wc -l`
+load1=`w | grep 'average' | awk  '{print $(NF-2)}'| sed 's/,//g'`
+load5=`w | grep 'average' | awk  '{print $(NF-1)}'| sed 's/,//g'`
+load15=`w | grep 'average' | awk  '{print $NF}'| sed 's/,//g'`
+#CpuIdle=`vmstat 1 5 |sed -n '3,$p' |awk '{x = x + $15} END {print x/5}' |awk -F. '{print $1}'`
+CpuIdle=`vmstat |sed -n '3,$p' |awk '{print $15}' |awk -F. '{print $1}'`
+CpuUsg=`echo "$((100-$CpuIdle))"`
+LOAD=`awk 'BEGIN{printf "负载 %.2f% 1分钟%s  5分钟%s  15分钟%s\n", '$CpuUsg', '$load1','$load5','$load15'}'`
+
+######## 汇总显示项 ########
+#system base info
+SYS_INFO="主机名@${HOSTNAME_FQDN}\nIP地址@${IP}\n系统版本@${RELEASE}\n内核版本@${KERNEL_VERSION}\n核心数@${cpu_nums}\n已登录用户@${USERS_NUM}\n系统时间@${FORMATEDTIME}\n系统运行@${SYS_UPTIME}\n当前用户@${USER}\n进程数@${PSA}"
+#usage info
+USAGE_INFO="${LOAD}\n${MEMORY}\n${DISK_ROOT}\n${DISK_DATA}"
+
+## extra info
+if [[ "X$disk_warning" != "X" ]]; then
+    USAGE_INFO="${USAGE_INFO}\n${disk_warning}"
+fi
+
+if [[ "X$DOCKER_VERSION" != "X" ]]; then
+    SYS_INFO="${SYS_INFO}\nDocker版本@${DOCKER_VERSION}"
+fi
+
+########## 显示 ########
+# 显示logo
+WIDTH=$(tput cols)
+AISATSU="GOOD $TIME $USER!"
+
+echo -ne "\e[1;32m"
+cowsay -f `cowsay -l|grep -v 'Cow files in /usr/share/cowsay:' | sed 's/ /\n/g'|shuf -n1` `echo "$AISATSU"`
+echo
+echo -ne "\e[1;35m"
+figlet $HOSTNAME -w $WIDTH
+
+echo -ne "\e[0m"
+
+echo -e "$SYS_INFO" | awk -F'@' -f /usr/local/bin/color.awk -e '
+BEGIN{
+    $1 = BRIGHT_MAGENTA("项目");
+    $2 = BRIGHT_MAGENTA("信息");
+    print "---------------------------------------------------------------------------------";
+    printf "|%-25s\t|%-60s\t|\n", $1,$2;
+    print "---------------------------------------------------------------------------------";
+}
+{
+    if($1=="IP地址"){
+        $2 = BL_BRIGHT_MAGENTA($2)
+    } else{
+    $2 = BRIGHT_GREEN($2);
+    }
+    $1 = BRIGHT_CYAN($1);
+    printf "|%-25s\t|%-60s\t|\n", $1,$2;
+}
+END{
+    print "---------------------------------------------------------------------------------";
+}'
+
+# 列表显示系统资源使用情况
+echo -e "$USAGE_INFO" | awk -f /usr/local/bin/color.awk -e '
+BEGIN{
+    printf "|%-15s\t|%-20s\t|%-20s\t|%-20s\t|%-20s\t|\n", \
+           BRIGHT_MAGENTA("监控项"),BRIGHT_MAGENTA("使用率(%)"),BRIGHT_MAGENTA("总量"),BRIGHT_MAGENTA("已用"),BRIGHT_MAGENTA("可用");
+    print "---------------------------------------------------------------------------------";
+}
+{
+    sub (/%/, "", $2);
+    if($2*1 > 80){
+        $1 = BL_BRIGHT_RED($1)
+        $2 = BL_BRIGHT_RED($2)
+        sub (/$2/, "$2%", $2)
+    } else{
+        $1 = BRIGHT_CYAN($1)
+        $2 = BRIGHT_GREEN($2)
+    }
+    $3 = BRIGHT_BLUE($3);
+    $4 = BRIGHT_CYAN($4);
+    $5 = GREEN($5);
+    printf "|%-20s\t|%-20s\t|%-20s\t|%-20s\t|%-20s\t|\n", $1,$2,$3,$4,$5;
+}
+END{
+    print "---------------------------------------------------------------------------------";
+}'
