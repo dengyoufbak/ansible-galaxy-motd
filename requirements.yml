@@ -1,0 +1,5 @@
+---
+roles:
+  - src: https://github.com/dengyouf/Ansible-Galaxy-Motd.git
+    scm: git
+    version: main
