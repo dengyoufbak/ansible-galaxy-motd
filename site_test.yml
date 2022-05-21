@@ -1,0 +1,11 @@
+---
+- name: Ansible Galaxy Motd
+  hosts: all
+  remote_user: root
+  become: yes
+
+  tasks:
+    - include_role:
+        name: dengyouf.ansible_galaxy_motd
+      vars:
+        FILE_COPY_DIR: /usr/local/bin
