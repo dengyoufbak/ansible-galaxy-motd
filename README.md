@@ -16,3 +16,9 @@ roles:
 ```
 
 - ` ansible-playbook -i .ansible/roles/Ansible-Galaxy-Motd/tests/inventory  .ansible/roles/Ansible-Galaxy-Motd/tests/test.yml`
+
+## 
+
+```
+ansible-galaxy install dengyouf.ansible_galaxy_motd
+```
